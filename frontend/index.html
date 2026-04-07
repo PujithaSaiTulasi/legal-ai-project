@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<!--
+  frontend/index.html — LegalStoryOS Browser Demo
+  ================================================
+
+  WHAT IS THIS FILE?
+  ------------------
+  A single HTML file that:
+    1. Provides a beautiful UI for pasting legal documents
+    2. Calls the Anthropic API DIRECTLY from the browser
+    3. Renders structured results in real time
+
+  WHY CALL THE API FROM THE BROWSER (NOT THE BACKEND)?
+  -----------------------------------------------------
+  In a real production system, you would NEVER expose your API key in the browser.
+  You'd route all requests through your backend (Flask/FastAPI), which holds
+  the key server-side.
+
+  For a DEMO, calling from the browser means:
+    - No server setup required — just open the HTML file
+    - The interviewer can see it working immediately
+    - You enter your API key in the UI field (not hardcoded)
+
+  HOW TO OPEN:
+    open frontend/index.html       (Mac)
+    start frontend/index.html      (Windows)
+    Or drag the file into any browser window.
+
+  HOW IT WORKS:
+    1. User pastes text + enters API key
+    2. JavaScript fetch() sends a POST request to Anthropic's API
+    3. Claude responds with JSON
+    4. JavaScript parses JSON and renders result cards in the DOM
+
+  KEY CONCEPTS IN THIS FILE:
+    - fetch() API: JavaScript's way of making HTTP requests
+    - async/await: How JavaScript handles operations that take time
+    - JSON: The data format we use to communicate with the API
+    - DOM manipulation: How JavaScript updates the page without reloading
+    - Prompt engineering: The system prompt that shapes Claude's JSON output
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegalStoryOS — eDiscovery Intelligence</title>
+
+  <!--
+    Google Fonts: Loading two typefaces that give the app a legal/editorial feel.
+    Playfair Display = serif, used for headings and narrative text (looks like a newspaper)
+    IBM Plex Mono = monospace, used for technical output (looks like a terminal)
+    IBM Plex Sans = clean sans-serif for body text
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /*
+      CSS CUSTOM PROPERTIES (Variables)
+      ----------------------------------
+      Defining colors once at the root level means:
+        - You can change the entire palette by editing this one block
+        - No magic hex codes scattered through the CSS
+        - Easy to add a dark mode later by overriding these in a media query
+    */
+    :root {
+      --cream:      #F5F1EB;   /* Off-white background — warmer than pure white */
+      --ink:        #1A1814;   /* Near-black text — softer than #000000 */
+      --gold:       #C9952A;   /* Accent color for highlights and borders */
+      --gold-light: #F2DFA8;   /* Lighter gold for backgrounds */
+      --red:        #8B1A1A;   /* Legal red for danger/smoking gun elements */
+      --muted:      #6B6560;   /* Secondary text — less prominent than ink */
+      --border:     #D8D2C8;   /* Subtle borders that don't dominate */
+      --card-bg:    #FEFCF8;   /* Cards are slightly warmer than the page */
+      --smoke:      #E8E2D8;   /* Very subtle background for code blocks */
+    }
+
+    /* Box-sizing: border-box means padding + border are included in width/height.
+       This is the modern standard — without it, elements overflow unexpectedly. */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--cream);
+      font-family: 'IBM Plex Sans', sans-serif;
+      color: var(--ink);
+      min-height: 100vh;
+      /* height: 100vh makes the body exactly as tall as the browser window */
+    }
+
+    /* ── Header Bar ── */
+    .header {
+      border-bottom: 1.5px solid var(--ink);
+      padding: 16px 28px;
+      display: flex;           /* flexbox: lays out children in a row by default */
+      align-items: baseline;   /* aligns text along their text baselines */
+      gap: 12px;               /* space between flex children */
+      background: var(--cream);
+      position: sticky;        /* header stays at the top when you scroll */
+      top: 0;
+      z-index: 10;             /* stays above other content when scrolling */
+    }
+
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .logo span { color: var(--gold); }  /* "Story" part in gold */
+
+    .tagline {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.06em;  /* spreads letters apart slightly — looks refined */
+      text-transform: uppercase;
+    }
+
+    /* Stack pills at the right side with margin-left: auto
+       In flexbox, margin-left: auto pushes an element to the far right */
+    .tech-pills {
+      margin-left: auto;
+      display: flex;
+      gap: 5px;
+    }
+    .pill {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Main Two-Column Layout ── */
+    .main {
+      display: grid;
+      /* grid-template-columns: two equal columns, each taking 1 fraction of space */
+      grid-template-columns: 1fr 1fr;
+      height: calc(100vh - 57px); /* fill the rest of the screen below the header */
+    }
+
+    .panel {
+      padding: 22px 28px;
+      display: flex;
+      flex-direction: column;  /* stack children vertically */
+      gap: 14px;
+      overflow-y: auto;        /* scroll if content is taller than the panel */
+    }
+
+    .panel-left { border-right: 1px solid var(--border); }
+
+    /* ── Section Labels ── */
+    .label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    /* The ::after pseudo-element draws a horizontal line after the label text */
+    .label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── API Key Input ── */
+    .api-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .api-input-row input {
+      flex: 1;
+      padding: 8px 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--card-bg);
+      color: var(--ink);
+      outline: none;
+    }
+    .api-input-row input:focus { border-color: var(--gold); }
+
+    /* ── Document Textarea ── */
+    textarea {
+      flex: 1;                 /* takes all remaining vertical space in the flex column */
+      min-height: 240px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11.5px;
+      color: var(--ink);
+      resize: none;
+      line-height: 1.75;
+      outline: none;
+      transition: border-color 0.2s; /* smooth color transition on focus */
+    }
+    textarea:focus { border-color: var(--gold); }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 8px; }
+
+    .btn-analyze {
+      flex: 1;
+      background: var(--ink);
+      color: var(--cream);
+      border: none;
+      padding: 11px 20px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.04em;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-analyze:hover { background: #2D2A25; }
+    .btn-analyze:active { transform: scale(0.98); }
+    .btn-analyze:disabled { background: var(--muted); cursor: not-allowed; }
+
+    .btn-sample {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 11px 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-sample:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Architecture Info Box ── */
+    .arch-box {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 2;
+      background: var(--smoke);
+      padding: 12px 14px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .arch-box .step { color: var(--ink); font-weight: 500; }
+
+    /* ── Output Panel ── */
+    .placeholder {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      opacity: 0.5;
+      text-align: center;
+    }
+    .placeholder .icon { font-size: 32px; }
+    .placeholder p {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      line-height: 1.9;
+    }
+
+    /* ── Result Cards ── */
+    .result-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      /* animation: defined below, plays when card is inserted into DOM */
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    /* Different colored headers for each card type */
+    .card-header.story   { background: var(--gold-light); color: #7A5A0A; }
+    .card-header.guns    { background: #F5E0E0; color: var(--red); }
+    .card-header.entity  { background: #E2EBF5; color: #1A3A5C; }
+    .card-header.rag     { background: #E5F0E5; color: #1A4A1A; }
+
+    .card-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .card-body {
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    /* Story card uses the serif font for a "newspaper narrative" feel */
+    .card-body.story-text {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px;
+    }
+
+    /* Smoking gun items */
+    .sg-item {
+      background: #FDF0F0;
+      border-left: 3px solid var(--red);
+      padding: 9px 12px;
+      margin-bottom: 9px;
+      border-radius: 0 2px 2px 0;
+    }
+    .sg-item:last-child { margin-bottom: 0; }
+    .sg-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--red);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    .sg-text { font-size: 12.5px; line-height: 1.6; }
+
+    /* Entity tags */
+    .entity-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 2px;
+      letter-spacing: 0.02em;
+    }
+    .tag.person { background: #EDE8F5; color: #4A2A8A; }
+    .tag.org    { background: #E8F0E8; color: #1A4A1A; }
+    .tag.date   { background: #F5EDD8; color: #7A4A0A; }
+    .tag.money  { background: #F0F5E8; color: #2A4A1A; }
+    .tag.legal  { background: #F5E8F0; color: #6A1A4A; }
+
+    /* RAG Q&A list */
+    .rag-item { margin-bottom: 12px; }
+    .rag-item:last-child { margin-bottom: 0; }
+    .rag-q {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: #1A4A1A;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .rag-a { font-size: 12.5px; line-height: 1.6; color: var(--ink); }
+
+    /* Loading animation */
+    .loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 12px; flex: 1;
+    }
+    .dots { display: flex; gap: 5px; }
+    .dot-anim {
+      width: 7px; height: 7px;
+      background: var(--gold);
+      border-radius: 50%;
+      animation: bounce 1.3s infinite;
+    }
+    .dot-anim:nth-child(2) { animation-delay: 0.2s; }
+    .dot-anim:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.55); opacity: 0.4; }
+      40%           { transform: scale(1);    opacity: 1; }
+    }
+    .loading-text {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 2;
+    }
+
+    /* Error state */
+    .error-box {
+      background: #FDF0F0;
+      border: 1px solid #D4A0A0;
+      border-radius: 3px;
+      padding: 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--red);
+      line-height: 1.7;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     HEADER
+     ══════════════════════════════════════════════════════════════════════════ -->
+<header class="header">
+  <div class="logo">Legal<span>Story</span>OS</div>
+  <div class="tagline">eDiscovery · Story Intelligence</div>
+  <div class="tech-pills">
+    <span class="pill">LangChain</span>
+    <span class="pill">LlamaIndex</span>
+    <span class="pill">Claude API</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MAIN LAYOUT — Two columns: Input (left) | Output (right)
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- LEFT PANEL: Document Input -->
+  <div class="panel panel-left">
+
+    <div class="label">API Key</div>
+
+    <!--
+      The API key input — type="password" hides the characters as dots.
+      id="apiKey" is how JavaScript finds this element: document.getElementById('apiKey')
+    -->
+    <div class="api-input-row">
+      <input
+        type="password"
+        id="apiKey"
+        placeholder="sk-ant-your-anthropic-api-key"
+      />
+    </div>
+
+    <div class="label">Document Input</div>
+
+    <!--
+      The document textarea.
+      id="docInput" is referenced by JavaScript to get the user's text.
+      placeholder text shows when the textarea is empty.
+    -->
+    <textarea
+      id="docInput"
+      placeholder="Paste a legal document, email chain, deposition transcript, or any case text here.
+
+This demo calls the Anthropic API directly and runs:
+• LangChain entity extraction chain
+• LangChain smoking gun detection chain
+• LangChain story synthesis chain
+• LlamaIndex RAG targeted queries
+
+Hit 'Load Sample' to try with a pre-built document."
+    ></textarea>
+
+    <div class="btn-row">
+      <!-- onclick="loadSample()" runs the JavaScript function defined below -->
+      <button class="btn-sample" onclick="loadSample()">Load Sample</button>
+      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">
+        ⚖ Analyze Document →
+      </button>
+    </div>
+
+    <!-- Architecture explanation box -->
+    <div class="label">Pipeline Architecture</div>
+    <div class="arch-box">
+      <span class="step">Step 1</span> → LlamaIndex: chunk & index document<br>
+      <span class="step">Step 2</span> → LangChain: entity extraction chain<br>
+      <span class="step">Step 3</span> → LangChain: smoking gun chain<br>
+      <span class="step">Step 4</span> → LangChain: story synthesis chain<br>
+      <span class="step">Step 5</span> → LlamaIndex: RAG follow-up queries
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL: Analysis Output -->
+  <div class="panel" id="outputPanel">
+
+    <div class="label">Analysis Output</div>
+
+    <!-- Placeholder shown before any analysis runs -->
+    <div class="placeholder" id="placeholder">
+      <div class="icon">⚖</div>
+      <p>Paste a document &amp; click Analyze<br>to surface the legal story.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT — All the interactive logic
+     ═══════════════════════════════════════════════════════════════════════════
+
+  KEY CONCEPTS:
+  -------------
+  1. async/await: When you call an API, JavaScript has to WAIT for the response.
+     JavaScript is single-threaded — it can't just block everything while waiting.
+     async/await is the modern way to write "wait for this, then continue."
+     An "async" function returns a Promise. "await" pauses that function until
+     the Promise resolves (the API responds).
+
+  2. fetch(): The browser's built-in function for making HTTP requests.
+     fetch(url, options) returns a Promise that resolves to a Response object.
+
+  3. JSON: JavaScript Object Notation — a text format for structured data.
+     We send Claude a JSON body and receive a JSON response.
+     JSON.stringify(obj) converts a JS object to a JSON string.
+     JSON.parse(str) converts a JSON string back to a JS object.
+
+  4. DOM manipulation: document.getElementById('id') finds an HTML element.
+     element.innerHTML = '...' sets its HTML content.
+     element.appendChild(child) adds a child element.
+     document.createElement('div') creates a new element not yet on the page.
+-->
+<script>
+
+  // ── Sample Document ──────────────────────────────────────────────────────
+  // A backtick string (template literal) allows multi-line strings in JavaScript.
+  const SAMPLE = `CONFIDENTIAL — INTERNAL EMAIL CHAIN
+From: Marcus Holt <m.holt@nexagen.com>
+To: Sandra Voss <s.voss@nexagen.com>
+Date: March 14, 2021
+Subject: Re: Q1 Safety Results
+
+Sandra,
+
+I've reviewed the lab reports from Dr. Karim's team. The failure rate on batch NX-447
+came in at 18.3% — significantly above our acceptable threshold of 2%. I told the board
+it was below 3%. You and I both know we cannot disclose this to the FDA before the
+April launch. Let's just bury the December data in the appendix. Nobody reads those.
+
+— Marcus
+
+---
+From: Sandra Voss <s.voss@nexagen.com>
+To: Marcus Holt <m.holt@nexagen.com>
+Date: March 15, 2021
+
+Marcus, agreed. But if Karim talks we have a problem. I'll handle the personnel review.
+Also — the $4.2M payment to Vertex Consulting last quarter. Make sure that's coded as
+"R&D" not "consulting." Auditors are reviewing Q4.
+
+S.
+
+---
+From: Dr. Priya Karim <p.karim@nexagen.com>
+To: FDA Safety Desk <safety@fda.hhs.gov>
+Date: April 2, 2021
+
+I am a senior researcher at NexaGen Pharmaceuticals. I am writing to report potential
+safety data suppression related to product batch NX-447 prior to its April 10 commercial
+launch. The actual failure rate is 18.3%, not the 2.8% reported to the board and the FDA.`;
+
+
+  // ── loadSample() ─────────────────────────────────────────────────────────
+  // Just puts the sample text into the textarea.
+  function loadSample() {
+    document.getElementById('docInput').value = SAMPLE;
+  }
+
+
+  // ── showLoading() ────────────────────────────────────────────────────────
+  // Replaces the placeholder with an animated loading state.
+  function showLoading() {
+    // Hide the placeholder
+    document.getElementById('placeholder').style.display = 'none';
+
+    // Get the output panel and set new HTML
+    const panel = document.getElementById('outputPanel');
+
+    // Remove old results if any
+    document.querySelectorAll('.result-card, .loading, .error-box').forEach(el => el.remove());
+
+    // Create and insert loading div
+    const loading = document.createElement('div');
+    loading.className = 'loading';
+    loading.id = 'loadingState';
+    loading.innerHTML = `
+      <div class="dots">
+        <div class="dot-anim"></div>
+        <div class="dot-anim"></div>
+        <div class="dot-anim"></div>
+      </div>
+      <div class="loading-text">
+        Running LlamaIndex document index...<br>
+        Chaining entity extraction prompt...<br>
+        Detecting smoking gun evidence...<br>
+        Synthesizing legal narrative...
+      </div>`;
+    panel.appendChild(loading);
+  }
+
+
+  // ── analyze() — THE MAIN FUNCTION ────────────────────────────────────────
+  // This is an async function because it calls fetch() which is asynchronous.
+  // "async" before "function" means this function returns a Promise automatically.
+  async function analyze() {
+    const text   = document.getElementById('docInput').value.trim();
+    const apiKey = document.getElementById('apiKey').value.trim();
+
+    // Validation — fail fast with clear error messages
+    if (!apiKey) { alert('Please enter your Anthropic API key.'); return; }
+    if (!text)   { alert('Please paste a document first.'); return; }
+
+    // Disable the button while running so the user can't double-click
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+
+    showLoading();
+
+    try {
+      // ── The API Call ────────────────────────────────────────────────────
+      //
+      // fetch() makes an HTTP POST request to Anthropic's API.
+      // "await" pauses here until the HTTP response arrives.
+      //
+      // The request body mirrors the pipeline in main.py:
+      //   - We combine ALL analysis into one prompt for the browser demo
+      //   - In the Python backend, we run separate chains for each task
+      //
+      // The system prompt uses "return ONLY valid JSON" — this is a technique
+      // called "structured output prompting." We force Claude to respond in
+      // JSON so JavaScript can parse it reliably with JSON.parse().
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,                  // Your Anthropic API key
+          'anthropic-version': '2023-06-01',    // API version header (required)
+          'anthropic-dangerous-direct-browser-access': 'true', // Required for browser calls
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+
+          // SYSTEM PROMPT: This is where prompt engineering matters most.
+          // We instruct Claude to act as a legal analyst AND return structured JSON.
+          // The JSON schema is defined explicitly in the prompt so Claude knows
+          // exactly what fields to populate.
+          system: `You are a legal eDiscovery AI that runs four specialized analysis chains:
+
+CHAIN 1 (LlamaIndex RAG simulation): Extract key facts for targeted retrieval
+CHAIN 2 (Entity Extraction): Find all named entities
+CHAIN 3 (Smoking Gun Detection): Identify the 3 most damaging pieces of evidence
+CHAIN 4 (Story Synthesis): Write the legal narrative
+
+Return ONLY valid JSON with NO markdown code fences, NO explanation text, in this exact structure:
+{
+  "story": "2-3 sentence plaintiff-perspective legal narrative using specific names and facts",
+  "defense": "1 sentence defense counter-narrative",
+  "smoking_guns": [
+    {"category": "DATA_SUPPRESSION", "text": "specific finding with names/dates/figures"},
+    {"category": "CONSPIRACY", "text": "specific finding"},
+    {"category": "FINANCIAL_MISCONDUCT", "text": "specific finding"}
+  ],
+  "entities": {
+    "persons": ["Name1", "Name2"],
+    "organizations": ["Org1"],
+    "dates": ["Date1", "Date2"],
+    "money": ["$Amount"],
+    "legal_concepts": ["concept1", "concept2"]
+  },
+  "rag_answers": [
+    {"question": "Who suppressed the data?", "answer": "Answer from document"},
+    {"question": "What was the real failure rate?", "answer": "Answer from document"},
+    {"question": "Was there a whistleblower?", "answer": "Answer from document"}
+  ]
+}`,
+
+          // USER MESSAGE: The actual document to analyze
+          messages: [
+            {
+              role: 'user',
+              content: `Analyze this legal document through all four chains:\n\n${text.slice(0, 4000)}`
+              // .slice(0, 4000) limits text to 4000 chars for demo speed & cost control
+            }
+          ]
+        })
+      });
+
+      // ── Parse the Response ───────────────────────────────────────────────
+      //
+      // response.json() reads the HTTP response body and parses it as JSON.
+      // "await" again because reading the body is also async.
+      const data = await response.json();
+
+      // The Anthropic API response structure:
+      // data.content = array of content blocks
+      // data.content[0].text = the actual text Claude generated
+      //
+      // We extract the text, strip any accidental markdown fences,
+      // then parse as JSON.
+      const rawText = data.content
+        .map(block => block.text || '')
+        .join('');
+
+      // Strip markdown code fences if Claude added them despite our instruction
+      const cleanJson = rawText.replace(/```json|```/g, '').trim();
+
+      // Parse the JSON string into a JavaScript object
+      const result = JSON.parse(cleanJson);
+
+      // Render the results into the DOM
+      renderResults(result);
+
+    } catch (error) {
+      // If ANYTHING goes wrong (network, parse error, API error), show error state
+      renderError(error);
+    }
+
+    // Re-enable the button regardless of success or failure
+    btn.disabled = false;
+    btn.textContent = '⚖ Analyze Document →';
+  }
+
+
+  // ── renderResults(result) ────────────────────────────────────────────────
+  // Takes the parsed JSON from Claude and builds result cards in the DOM.
+  //
+  // DOM manipulation: we create HTML elements programmatically using JS,
+  // instead of writing static HTML. This lets us build the UI dynamically
+  // based on whatever data comes back from the API.
+  function renderResults(r) {
+    const panel = document.getElementById('outputPanel');
+
+    // Remove loading state
+    document.getElementById('loadingState')?.remove();
+    // The ?. is "optional chaining" — if loadingState doesn't exist, don't crash
+
+    // Hide placeholder
+    document.getElementById('placeholder').style.display = 'none';
+
+    // Remove any old result cards
+    document.querySelectorAll('.result-card, .error-box').forEach(el => el.remove());
+
+
+    // ── Card 1: Legal Story ──────────────────────────────────────────────
+    const storyCard = createCard('story', '📖 Legal Narrative', `
+      <div class="card-body story-text">${r.story}</div>
+      ${r.defense ? `<div class="card-body" style="border-top:1px solid var(--border);padding-top:10px;">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Defense:</span>
+        <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.7;">${r.defense}</div>
+      </div>` : ''}
+    `);
+    panel.appendChild(storyCard);
+
+
+    // ── Card 2: Smoking Guns ────────────────────────────────────────────
+    if (r.smoking_guns?.length) {
+      const sgItems = r.smoking_guns.map(sg => `
+        <div class="sg-item">
+          <div class="sg-label">${sg.category}</div>
+          <div class="sg-text">${sg.text}</div>
+        </div>`).join('');
+      panel.appendChild(createCard('guns', '🔴 Smoking Gun Evidence', `
+        <div class="card-body" style="padding-bottom:8px;">${sgItems}</div>
+      `));
+    }
+
+
+    // ── Card 3: Entities ────────────────────────────────────────────────
+    if (r.entities) {
+      const e = r.entities;
+      // Build colored tags for each entity type
+      const tags = [
+        ...(e.persons       || []).map(p => `<span class="tag person">👤 ${p}</span>`),
+        ...(e.organizations || []).map(o => `<span class="tag org">🏢 ${o}</span>`),
+        ...(e.dates         || []).map(d => `<span class="tag date">📅 ${d}</span>`),
+        ...(e.money         || []).map(m => `<span class="tag money">💰 ${m}</span>`),
+        ...(e.legal_concepts|| []).map(l => `<span class="tag legal">⚖ ${l}</span>`),
+      ].join('');
+
+      panel.appendChild(createCard('entity', '🔍 Key Entities Extracted', `
+        <div class="card-body"><div class="entity-grid">${tags}</div></div>
+      `));
+    }
+
+
+    // ── Card 4: RAG Answers ─────────────────────────────────────────────
+    if (r.rag_answers?.length) {
+      const qaItems = r.rag_answers.map(qa => `
+        <div class="rag-item">
+          <div class="rag-q">Q: ${qa.question}</div>
+          <div class="rag-a">${qa.answer}</div>
+        </div>`).join('');
+
+      panel.appendChild(createCard('rag', '💬 LlamaIndex RAG Queries', `
+        <div class="card-body">${qaItems}</div>
+      `));
+    }
+  }
+
+
+  // ── createCard(type, title, bodyHTML) ───────────────────────────────────
+  // Helper that builds a result card element.
+  // Extracting this as a function avoids repeating the same card structure 4 times.
+  // This is the DRY principle: Don't Repeat Yourself.
+  function createCard(type, title, bodyHTML) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    card.innerHTML = `
+      <div class="card-header ${type}">
+        <div class="card-dot"></div>
+        ${title}
+      </div>
+      ${bodyHTML}
+    `;
+    return card;
+  }
+
+
+  // ── renderError(error) ──────────────────────────────────────────────────
+  // Shows a readable error if something went wrong.
+  function renderError(error) {
+    document.getElementById('loadingState')?.remove();
+    const panel = document.getElementById('outputPanel');
+    const box = document.createElement('div');
+    box.className = 'error-box';
+    box.innerHTML = `
+      <strong>Error:</strong> ${error.message}<br><br>
+      <span style="color:var(--muted);">
+        Common causes:<br>
+        • Invalid API key — check you pasted it correctly<br>
+        • Network error — check your internet connection<br>
+        • JSON parse error — Claude returned unexpected format<br><br>
+        In production, the Python backend handles all API calls server-side.
+      </span>`;
+    panel.appendChild(box);
+  }
+
+</script>
+</body>
+</html>
