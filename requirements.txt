@@ -1,0 +1,40 @@
+# ============================================================
+# requirements.txt — All packages this project depends on
+# ============================================================
+# Install everything with: pip install -r requirements.txt
+#
+# Default stack: Ollama (local LLM + embeddings). Install Ollama from
+# https://ollama.com then: ollama pull llama3 && ollama pull nomic-embed-text
+#
+# For Claude instead: set LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY in .env
+# ============================================================
+
+# --- Core AI Frameworks ---
+
+langchain==0.3.25
+
+# Local models via Ollama (default LLM_PROVIDER=ollama)
+langchain-ollama==0.3.0
+ollama>=0.4.4,<1
+
+# Optional cloud LLM (LLM_PROVIDER=anthropic)
+langchain-anthropic==0.3.15
+anthropic==0.52.0
+
+llama-index==0.12.37
+
+llama-index-llms-ollama==0.4.2
+llama-index-embeddings-ollama==0.5.0
+
+# Used when LLM_PROVIDER=anthropic
+llama-index-llms-anthropic==0.6.6
+
+# OpenAI embeddings when LLM_PROVIDER=anthropic and OPENAI_API_KEY is set
+llama-index-embeddings-openai==0.3.1
+
+# --- Utilities ---
+
+python-dotenv==1.1.0
+rich==14.0.0
+flask==3.1.1
+flask-cors==5.0.1
