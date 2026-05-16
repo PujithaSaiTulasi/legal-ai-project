@@ -30,7 +30,7 @@ from rich.panel import Panel
 if __name__ == "__main__":
     console.print(Panel.fit(
         "[bold]⚖ LegalStoryOS[/bold] — Story-Driven eDiscovery Intelligence\n"
-        "[dim]LangChain · LlamaIndex · Claude API · Python[/dim]",
+        "[dim]LangChain · LlamaIndex · Ollama (local) · Python[/dim]",
         border_style="gold1",
     ))
 

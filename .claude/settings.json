@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m venv venv)",
+      "Bash(./venv/bin/python -m pip install --upgrade pip)",
+      "Bash(./venv/bin/python run.py)",
+      "Bash(pkill -f \"ollama serve\")",
+      "Bash(OLLAMA_ORIGINS='*' nohup ollama serve)",
+      "Bash(disown)",
+      "Bash(curl -sf http://127.0.0.1:11434/api/tags)",
+      "Bash(curl -sS -i -X POST http://127.0.0.1:11434/api/chat -H 'Content-Type: application/json' -H 'Origin: null' -d '{\"model\":\"llama3\",\"stream\":false,\"format\":\"json\",\"messages\":[{\"role\":\"user\",\"content\":\"reply with {\\\\\"ok\\\\\": true} only\"}]}')"
+    ]
+  }
+}

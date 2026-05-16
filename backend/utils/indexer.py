@@ -38,21 +38,16 @@ at once (context window limits + cost). RAG lets you index everything once,
 then retrieve only the 3 most relevant paragraphs for each specific question.
 """
 
-import warnings
-
 from llama_index.core import VectorStoreIndex, Document, Settings
 from llama_index.core.base.embeddings.base import BaseEmbedding
-from llama_index.core.embeddings.mock_embed_model import MockEmbedding
 from llama_index.core.node_parser import SentenceSplitter
+from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.ollama import OllamaEmbedding
 
 from backend.config import (
-    LLM_PROVIDER,
-    MODEL_NAME,
-    ANTHROPIC_API_KEY,
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     MAX_TOKENS,
-    OPENAI_API_KEY,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     OLLAMA_EMBED_MODEL,
@@ -87,61 +82,19 @@ def _patch_resolve_embed_model_for_prebuilt_instances() -> None:
     _EMBED_RESOLVE_PATCHED = True
 
 
-def _ensure_llama_index_embed_model_anthropic_path() -> None:
-    """
-    When using Claude for generation, avoid Settings.embed_model's default
-    resolution on Python 3.14 (LangChain bridge import crash).
-    """
-    if Settings._embed_model is not None:
-        return
-
-    if OPENAI_API_KEY:
-        from llama_index.embeddings.openai import OpenAIEmbedding
-
-        Settings._embed_model = OpenAIEmbedding(api_key=OPENAI_API_KEY)
-        return
-
-    warnings.warn(
-        "OPENAI_API_KEY is not set. Using MockEmbedding — vector retrieval is not "
-        "semantic. Set OPENAI_API_KEY for OpenAI embeddings, or use "
-        "LLM_PROVIDER=ollama with a local embedding model (e.g. nomic-embed-text).",
-        stacklevel=1,
-    )
-    Settings._embed_model = MockEmbedding(embed_dim=8)
-
-
 def _configure_llama_index_llm_and_embed() -> None:
-    """Point LlamaIndex at the same backend as LangChain (Ollama or Anthropic)."""
-    if LLM_PROVIDER == "ollama":
-        from llama_index.llms.ollama import Ollama
-        from llama_index.embeddings.ollama import OllamaEmbedding
-
-        Settings._llm = Ollama(
-            model=OLLAMA_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            temperature=0.1,
-            request_timeout=120.0,
-            additional_kwargs={"num_predict": MAX_TOKENS},
-        )
-        Settings._embed_model = OllamaEmbedding(
-            model_name=OLLAMA_EMBED_MODEL,
-            base_url=OLLAMA_BASE_URL,
-        )
-        return
-
-    if not ANTHROPIC_API_KEY:
-        raise EnvironmentError(
-            "LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY in your environment."
-        )
-
-    from llama_index.llms.anthropic import Anthropic as LlamaAnthropic
-
-    Settings.llm = LlamaAnthropic(
-        model=MODEL_NAME,
-        api_key=ANTHROPIC_API_KEY,
-        max_tokens=MAX_TOKENS,
+    """Point LlamaIndex at the local Ollama server for both LLM + embeddings."""
+    Settings._llm = Ollama(
+        model=OLLAMA_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        temperature=0.1,
+        request_timeout=120.0,
+        additional_kwargs={"num_predict": MAX_TOKENS},
     )
-    _ensure_llama_index_embed_model_anthropic_path()
+    Settings._embed_model = OllamaEmbedding(
+        model_name=OLLAMA_EMBED_MODEL,
+        base_url=OLLAMA_BASE_URL,
+    )
 
 
 def build_index(text: str) -> VectorStoreIndex:

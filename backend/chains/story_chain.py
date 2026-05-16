@@ -22,8 +22,8 @@ In LangChain terms, this is called a "sequential chain" or "pipeline."
 
 WHY FEED PREVIOUS OUTPUTS INTO THIS CHAIN?
 -------------------------------------------
-Claude works better with structured context. Instead of re-discovering
-entities and key evidence from scratch, we hand it the already-extracted
+LLMs work better with structured context. Instead of re-discovering
+entities and key evidence from scratch, we hand the model the already-extracted
 information and say "now synthesize this into a story."
 
 This mirrors how human lawyers work: analysts extract facts, paralegals
@@ -35,7 +35,7 @@ PROMPT ENGINEERING TECHNIQUE: "Chain-of-Thought + Structure"
 The prompt forces a specific output structure with clear section headers.
 This does two things:
   1. Makes the output predictable and parseable
-  2. Forces Claude to reason through the problem step-by-step before
+  2. Forces the model to reason through the problem step-by-step before
      synthesizing — structured output = structured thinking
 
 The "Defense Counter-Narrative" section is especially valuable —

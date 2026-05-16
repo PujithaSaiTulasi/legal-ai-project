@@ -14,15 +14,16 @@ HOW IS THIS DIFFERENT FROM THE ENTITY CHAIN?
   - Smoking gun chain: Identifies WHAT MATTERS legally — requires reasoning and judgment
 
 This distinction is why we use separate chains. Each has a completely different
-system prompt that gives Claude a different "expert persona" and different instructions.
-Mixing them into one prompt would make the output worse — models perform better
-with focused, single-task prompts.
+system prompt that gives the model a different "expert persona" and different
+instructions. Mixing them into one prompt would make the output worse — models
+perform better with focused, single-task prompts.
 
 PROMPT ENGINEERING TECHNIQUE USED HERE: "Expert Persona"
 ---------------------------------------------------------
-We tell Claude "You are a seasoned litigator" instead of just "find important things."
-This activates Claude's knowledge about legal strategy, evidence standards, and
-courtroom dynamics. The persona shapes the lens through which it analyzes the text.
+We tell the model "You are a seasoned litigator" instead of just "find important
+things." This activates the model's knowledge about legal strategy, evidence
+standards, and courtroom dynamics. The persona shapes the lens through which it
+analyzes the text.
 
 Other techniques visible in this prompt:
   - Output format specification (numbered list with specific fields)

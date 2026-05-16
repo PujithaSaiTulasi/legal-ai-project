@@ -11,13 +11,13 @@ becomes the input of the next. The simplest chain is:
 
 Think of it like an assembly line:
   1. The Prompt Template takes your variables and builds the full prompt text
-  2. The LLM (Claude) reads the prompt and generates a response
+  2. The LLM (local Ollama model) reads the prompt and generates a response
   3. The Output Parser cleans up the response into a usable format
 
-WHY NOT JUST CALL CLAUDE DIRECTLY?
+WHY NOT JUST CALL THE LLM DIRECTLY?
 ------------------------------------
 You could just write:
-    response = anthropic.messages.create(prompt="Extract entities from: " + text)
+    response = ollama.chat(model="llama3", messages=[...])
 
 But LangChain chains give you:
   - Composability: chain this with other chains
@@ -35,7 +35,7 @@ Extract structured information from raw document text:
   - Legal concepts (fraud, suppression, etc.)
 
 This is called "Named Entity Recognition" (NER) — a classic NLP task,
-but here we use Claude instead of a traditional ML model, which means
+but here we use a local LLM instead of a traditional ML model, which means
 we get much better results on complex legal language.
 """
 
@@ -50,7 +50,7 @@ def build_entity_chain(llm: BaseChatModel):
     Builds and returns the entity extraction chain.
 
     Parameters:
-        llm: A configured chat model (Ollama or Anthropic), shared across chains.
+        llm: A configured chat model (Ollama), shared across chains.
 
     Returns:
         A LangChain runnable chain you can call with .invoke(document_text)
@@ -64,18 +64,18 @@ def build_entity_chain(llm: BaseChatModel):
     #
     # ChatPromptTemplate builds a structured chat conversation.
     # It takes a list of (role, message) tuples:
-    #   "system" = the instructions that define how Claude should behave
+    #   "system" = the instructions that define how the model should behave
     #   "human"  = the actual user message (the document text)
     #
     # Notice {document} — this is a placeholder variable.
     # When you call .invoke({"document": some_text}), LangChain replaces
-    # {document} with the actual text before sending to Claude.
+    # {document} with the actual text before sending to the model.
     #
     # Writing good system prompts is a skill called "prompt engineering."
     # The key principles used here:
     #   1. Clear role definition ("You are a legal entity extractor")
     #   2. Exact output format specified (so parsing is reliable)
-    #   3. "Output nothing else" — prevents Claude from adding preamble text
+    #   3. "Output nothing else" — prevents the model from adding preamble text
     entity_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a legal entity extractor specialized in eDiscovery.
 Extract all named entities from the document and return them in EXACTLY this format:
@@ -93,11 +93,11 @@ Be exhaustive — extract every entity. Output nothing else. No explanations, no
 
     # ── The Output Parser ─────────────────────────────────────────────────────
     #
-    # StrOutputParser is the simplest parser — it just takes Claude's response
+    # StrOutputParser is the simplest parser — it just takes the model's response
     # and returns it as a plain Python string.
     #
     # Other parsers exist for more structured output:
-    #   - JsonOutputParser: parses Claude's response as JSON
+    #   - JsonOutputParser: parses the model's response as JSON
     #   - PydanticOutputParser: validates against a Pydantic model schema
     #   - CommaSeparatedListOutputParser: splits a comma-separated list
     #

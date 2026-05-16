@@ -75,13 +75,7 @@ if str(_root) not in sys.path:
 
 import warnings
 
-# Third-party noise on Python 3.14 (Anthropic SDK pydantic.v1 bridge; Pydantic Field()).
-warnings.filterwarnings(
-    "ignore",
-    message="Core Pydantic V1 functionality isn't compatible with Python 3.14",
-    category=UserWarning,
-    module="anthropic._compat",
-)
+# Quiet third-party Pydantic-V1-on-3.14 deprecation noise from LangChain.
 warnings.filterwarnings(
     "ignore",
     message="Core Pydantic V1 functionality isn't compatible with Python 3.14",
@@ -96,7 +90,6 @@ warnings.filterwarnings(
 )
 
 # Import our modules — each does one focused job
-from backend.config import LLM_PROVIDER
 from backend.llm_providers import build_langchain_chat_llm
 from backend.utils.indexer import build_index, query_index
 from backend.utils.display import console, print_step, print_success, print_results
@@ -167,7 +160,7 @@ def run_pipeline(document_text: str) -> dict:
     """
 
     # ── Initialize the LLM ────────────────────────────────────────────────────
-    # Default: Ollama (local). Set LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY for Claude.
+    # Local Ollama model (configured via OLLAMA_MODEL / OLLAMA_BASE_URL).
     llm = build_langchain_chat_llm()
 
     # ── STEP 1: LlamaIndex Indexing ───────────────────────────────────────────
@@ -242,10 +235,9 @@ def run_pipeline(document_text: str) -> dict:
 if __name__ == "__main__":
     from rich.panel import Panel
 
-    _backend = "Ollama (local)" if LLM_PROVIDER == "ollama" else "Anthropic Claude"
     console.print(Panel.fit(
         "[bold]⚖ LegalStoryOS[/bold] — Story-Driven eDiscovery Intelligence\n"
-        f"[dim]LangChain · LlamaIndex · {_backend} · Python[/dim]",
+        "[dim]LangChain · LlamaIndex · Ollama (local) · Python[/dim]",
         border_style="gold1",
     ))
 
