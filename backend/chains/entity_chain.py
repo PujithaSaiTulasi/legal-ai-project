@@ -76,17 +76,18 @@ def build_entity_chain(llm: BaseChatModel):
     #   1. Clear role definition ("You are a legal entity extractor")
     #   2. Exact output format specified (so parsing is reliable)
     #   3. "Output nothing else" — prevents the model from adding preamble text
+    
     entity_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a legal entity extractor specialized in eDiscovery.
-Extract all named entities from the document and return them in EXACTLY this format:
+        Extract all named entities from the document and return them in EXACTLY this format:
 
-PERSONS: [comma-separated full names]
-ORGANIZATIONS: [comma-separated organization names]
-DATES: [comma-separated dates in any format found]
-MONETARY: [comma-separated dollar amounts or financial figures]
-LEGAL_CONCEPTS: [comma-separated legal concepts, e.g. fraud, suppression, whistleblower, FDA violation]
+        PERSONS: [comma-separated full names]
+        ORGANIZATIONS: [comma-separated organization names]
+        DATES: [comma-separated dates in any format found]
+        MONETARY: [comma-separated dollar amounts or financial figures]
+        LEGAL_CONCEPTS: [comma-separated legal concepts, e.g. fraud, suppression, whistleblower, FDA violation]
 
-Be exhaustive — extract every entity. Output nothing else. No explanations, no preamble."""),
+        Be exhaustive — extract every entity. Output nothing else. No explanations, no preamble."""),
 
         ("human", "Analyze this legal document and extract all entities:\n\n{document}")
     ])

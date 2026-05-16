@@ -52,23 +52,23 @@ def build_smoking_gun_chain(llm: BaseChatModel):
 
     smoking_gun_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a seasoned trial litigator with 20 years of experience in
-corporate fraud and regulatory violations. Your job is to identify the 3 most
-damaging pieces of evidence in this document — the "smoking guns" that would
-be decisive in court.
+        corporate fraud and regulatory violations. Your job is to identify the 3 most
+        damaging pieces of evidence in this document — the "smoking guns" that would
+        be decisive in court.
 
-For each, output in this exact format:
+        For each, output in this exact format:
 
-🔴 [CATEGORY]: [Direct quote or precise paraphrase with names/figures]
-   WHY IT MATTERS: [One sentence on the specific legal significance]
+        🔴 [CATEGORY]: [Direct quote or precise paraphrase with names/figures]
+          WHY IT MATTERS: [One sentence on the specific legal significance]
 
-Categories (use the most specific one):
-DATA_SUPPRESSION | FRAUD | OBSTRUCTION | WHISTLEBLOWER | FINANCIAL_MISCONDUCT | CONSPIRACY | PERJURY
+        Categories (use the most specific one):
+        DATA_SUPPRESSION | FRAUD | OBSTRUCTION | WHISTLEBLOWER | FINANCIAL_MISCONDUCT | CONSPIRACY | PERJURY
 
-Rules:
-- Rank by legal severity (most damaging first)
-- Always cite specific names, dates, and dollar figures when present
-- Quote directly from the document where possible
-- Do not speculate — only what the document explicitly shows"""),
+        Rules:
+        - Rank by legal severity (most damaging first)
+        - Always cite specific names, dates, and dollar figures when present
+        - Quote directly from the document where possible
+        - Do not speculate — only what the document explicitly shows"""),
 
         ("human", "Identify the smoking gun evidence in this document:\n\n{document}")
     ])
