@@ -1,6 +1,6 @@
 # ⚖️ LegalStoryOS — Complete Setup & Concept Guide
 
-> A story-driven eDiscovery intelligence tool powered by LangChain, LlamaIndex, and Claude.
+> A story-driven eDiscovery intelligence tool powered by LangChain, LlamaIndex, and a local Ollama LLM.
 > Built to demonstrate production-grade AI pipeline architecture for Altumatim.
 
 ---
@@ -12,12 +12,13 @@ legalstoryos/
 │
 ├── README.md                  ← You are here. Full guide + concept explanations.
 │
-├── .env                       ← Your secret API key (never commit this to git!)
+├── .env                       ← Optional overrides (OLLAMA_MODEL, OLLAMA_BASE_URL, etc.)
 ├── requirements.txt           ← All Python packages the project needs
 │
 ├── backend/                   ← All Python / AI code lives here
 │   ├── main.py                ← Entry point — runs the full pipeline in your terminal
 │   ├── config.py              ← Central config (model names, chunk sizes, etc.)
+│   ├── llm_providers.py       ← LangChain ChatOllama factory
 │   │
 │   ├── chains/                ← LangChain "reasoning" modules
 │   │   ├── __init__.py
@@ -71,10 +72,10 @@ Raw Document Text
       │
       ▼
 ┌─────────────────────────────────┐
-│  STEP 3: Claude API (the LLM)   │  ← "The Brain"
-│  Powers every AI decision.      │    Reads text, understands meaning,
-│  LangChain and LlamaIndex both  │    generates intelligent responses
-│  call Claude under the hood     │
+│  STEP 3: Local LLM (Ollama)     │  ← "The Brain"
+│  Powers every AI decision.      │    A model running on your own machine
+│  LangChain and LlamaIndex both  │    reads text, understands meaning, and
+│  call Ollama under the hood     │    generates intelligent responses.
 └─────────────────────────────────┘
       │
       ▼
@@ -139,49 +140,57 @@ pip install -r requirements.txt
 
 This will download and install:
 - `langchain` — the AI chain orchestration framework
-- `langchain-anthropic` — LangChain's plugin for Claude
+- `langchain-ollama` — LangChain's plugin for Ollama
 - `llama-index` — the document indexing & retrieval framework
-- `llama-index-llms-anthropic` — LlamaIndex's plugin for Claude
-- `anthropic` — the official Anthropic SDK
-- `python-dotenv` — reads your .env file
+- `llama-index-llms-ollama` — LlamaIndex's plugin for Ollama as the LLM
+- `llama-index-embeddings-ollama` — local embedding model via Ollama
+- `ollama` — the official Ollama Python client
+- `python-dotenv` — reads your `.env` file
 - `rich` — makes your terminal output beautiful
 - `flask` — optional, for running a local web server
 
 ---
 
-### Step 5: Get Your Anthropic API Key
+### Step 5: Install Ollama & Pull the Models
 
-1. Go to https://console.anthropic.com
-2. Sign in (or create an account)
-3. Click "API Keys" in the left sidebar
-4. Click "Create Key" — copy the key (it starts with `sk-ant-...`)
+1. Download Ollama from https://ollama.com and install it.
+2. Start the local server (it usually auto-starts; otherwise run `ollama serve`):
+   ```bash
+   ollama serve
+   ```
+3. Pull the chat model and the embedding model:
+   ```bash
+   ollama pull llama3
+   ollama pull nomic-embed-text
+   ```
 
-**What is an API Key?** It's a password that proves to Anthropic's servers that you're allowed to use Claude. Every time your code calls Claude, it sends this key. Keep it secret — never put it in code you share.
+**Why two models?** `llama3` is the chat/reasoning model used by every LangChain chain. `nomic-embed-text` turns text into the vectors that LlamaIndex uses for retrieval (RAG).
+
+The models run entirely on your machine — no API keys, no rate limits, no per-token cost.
 
 ---
 
-### Step 6: Create Your .env File
+### Step 6: (Optional) Customize via .env
 
-Create a file called `.env` in the root of the project:
+You only need a `.env` file if you want to change the defaults. Create one in the project root:
+
 ```bash
-# Create and edit the .env file
 touch .env
 ```
 
-Open it and add one line:
+Add any of these lines as overrides:
 ```
-ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
+OLLAMA_MODEL=llama3
+OLLAMA_EMBED_MODEL=nomic-embed-text
+OLLAMA_BASE_URL=http://127.0.0.1:11434
 ```
-
-**What is a .env file?** A simple text file that stores secret values (like passwords and API keys) separate from your code. The `python-dotenv` library reads this file at runtime and makes the values available as environment variables. This way, your secrets never get accidentally committed to GitHub.
 
 ---
 
 ### Step 7: Run the Backend Pipeline
 
 ```bash
-cd backend
-python main.py
+python run.py
 ```
 
 You'll see the analysis run step-by-step in your terminal with colored output.
@@ -190,7 +199,14 @@ You'll see the analysis run step-by-step in your terminal with colored output.
 
 ### Step 8: Open the Frontend Demo
 
-No server needed — just open the file directly:
+The browser demo talks to your local Ollama server directly. Because the page is served via `file://`, you may need to start Ollama with permissive CORS so the browser can reach it:
+
+```bash
+# Stop any running ollama server, then:
+OLLAMA_ORIGINS='*' ollama serve
+```
+
+Then open the HTML file:
 ```bash
 # On Mac:
 open frontend/index.html
@@ -201,16 +217,16 @@ start frontend/index.html
 # Or just double-click the file in your file explorer
 ```
 
-Enter your API key in the browser UI, paste a document, and click Analyze.
+Choose the model name (defaults to `llama3`), paste a document, and click **Analyze**.
 
 ---
 
 ## 🧪 Quick Test
 
-To verify everything works before the interview:
+To verify everything works:
 ```bash
-# From the legalstoryos/ folder, with venv activated:
-python backend/main.py
+# From the project root, with venv activated and Ollama running:
+python run.py
 ```
 
 Expected output: colored panels showing entities, smoking guns, and the legal narrative.
@@ -225,6 +241,8 @@ When they ask "walk me through your project":
 
 2. **"Each chain does one thing"** — Entity extraction, smoking gun detection, and story synthesis are separate chains. This makes them testable, swappable, and debuggable independently.
 
-3. **"It scales"** — The LlamaIndex VectorStoreIndex can be swapped for Elasticsearch (which Altumatim uses) to handle millions of documents with zero code changes.
+3. **"It runs fully local"** — The whole stack uses Ollama on the developer's machine. There's no external API call, no key management, and no per-token cost during development.
 
-4. **"The frontend is decoupled"** — The HTML demo can call the API directly. In production, you'd route through a Flask/FastAPI backend for auth and rate limiting.
+4. **"It scales"** — The LlamaIndex VectorStoreIndex can be swapped for Elasticsearch (which Altumatim uses) to handle millions of documents with zero code changes.
+
+5. **"The frontend is decoupled"** — The HTML demo can call the Ollama API directly. In production, you'd route through a Flask/FastAPI backend for auth and rate limiting.

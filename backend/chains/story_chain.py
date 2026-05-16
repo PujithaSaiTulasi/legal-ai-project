@@ -22,8 +22,8 @@ In LangChain terms, this is called a "sequential chain" or "pipeline."
 
 WHY FEED PREVIOUS OUTPUTS INTO THIS CHAIN?
 -------------------------------------------
-Claude works better with structured context. Instead of re-discovering
-entities and key evidence from scratch, we hand it the already-extracted
+LLMs work better with structured context. Instead of re-discovering
+entities and key evidence from scratch, we hand the model the already-extracted
 information and say "now synthesize this into a story."
 
 This mirrors how human lawyers work: analysts extract facts, paralegals
@@ -35,7 +35,7 @@ PROMPT ENGINEERING TECHNIQUE: "Chain-of-Thought + Structure"
 The prompt forces a specific output structure with clear section headers.
 This does two things:
   1. Makes the output predictable and parseable
-  2. Forces Claude to reason through the problem step-by-step before
+  2. Forces the model to reason through the problem step-by-step before
      synthesizing — structured output = structured thinking
 
 The "Defense Counter-Narrative" section is especially valuable —
@@ -62,51 +62,51 @@ def build_story_chain(llm: BaseChatModel):
 
     story_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are altumatimOS's story engine — the AI that turns raw legal
-evidence into the narrative that wins cases. Your job is to synthesize facts
-into a compelling, airtight legal story that a senior attorney could use
-directly in trial preparation.
+        evidence into the narrative that wins cases. Your job is to synthesize facts
+        into a compelling, airtight legal story that a senior attorney could use
+        directly in trial preparation.
 
-Output in EXACTLY this structure:
+        Output in EXACTLY this structure:
 
-─────────────────────────────────────
-THE STORY (plaintiff perspective):
-─────────────────────────────────────
-[2-3 paragraph narrative grounded in specific facts. Name names. Cite figures.
-Show the sequence of events that constitutes the wrongdoing.]
+        ─────────────────────────────────────
+        THE STORY (plaintiff perspective):
+        ─────────────────────────────────────
+        [2-3 paragraph narrative grounded in specific facts. Name names. Cite figures.
+        Show the sequence of events that constitutes the wrongdoing.]
 
-─────────────────────────────────────
-DEFENSE COUNTER-NARRATIVE:
-─────────────────────────────────────
-[1 paragraph — how would the defense tell this story? What would they argue?
-What facts would they emphasize or reframe?]
+        ─────────────────────────────────────
+        DEFENSE COUNTER-NARRATIVE:
+        ─────────────────────────────────────
+        [1 paragraph — how would the defense tell this story? What would they argue?
+        What facts would they emphasize or reframe?]
 
-─────────────────────────────────────
-KEY LEGAL RISKS & EXPOSURE:
-─────────────────────────────────────
-• [Specific legal risk with citation to the evidence]
-• [Second legal risk]
-• [Third legal risk]
+        ─────────────────────────────────────
+        KEY LEGAL RISKS & EXPOSURE:
+        ─────────────────────────────────────
+        • [Specific legal risk with citation to the evidence]
+        • [Second legal risk]
+        • [Third legal risk]
 
-─────────────────────────────────────
-RECOMMENDED NEXT DISCOVERY STEPS:
-─────────────────────────────────────
-• [What documents/depositions should be subpoenaed next?]
-• [Second recommendation]
+        ─────────────────────────────────────
+        RECOMMENDED NEXT DISCOVERY STEPS:
+        ─────────────────────────────────────
+        • [What documents/depositions should be subpoenaed next?]
+        • [Second recommendation]
 
-Ground everything in the provided facts. No speculation."""),
+        Ground everything in the provided facts. No speculation."""),
 
         ("human", """Synthesize the legal story from this information:
 
-=== ORIGINAL DOCUMENT ===
-{document}
+        === ORIGINAL DOCUMENT ===
+        {document}
 
-=== EXTRACTED ENTITIES ===
-{entities}
+        === EXTRACTED ENTITIES ===
+        {entities}
 
-=== SMOKING GUN EVIDENCE ===
-{smoking_guns}
+        === SMOKING GUN EVIDENCE ===
+        {smoking_guns}
 
-Now synthesize the complete legal narrative.""")
+        Now synthesize the complete legal narrative.""")
     ])
 
     # Note: this chain does NOT use RunnablePassthrough because it already

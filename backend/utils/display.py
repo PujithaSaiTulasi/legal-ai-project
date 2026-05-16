@@ -110,5 +110,5 @@ def print_results(results: dict):
         "\n[bold green]✓ Pipeline complete.[/bold green] "
         "[dim]LlamaIndex handled retrieval. "
         "LangChain handled reasoning. "
-        "Claude powered the LLM layer.[/dim]\n"
+        "Ollama powered the local LLM layer.[/dim]\n"
     )
