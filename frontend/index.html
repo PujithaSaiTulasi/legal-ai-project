@@ -326,6 +326,27 @@
     }
     .card-body::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
+    /* Raw chain output — monospace, wraps long lines, preserves the
+       ASCII separators and emoji bullets the Python chains produce. */
+    pre.card-body.raw {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+
+    /* Footer line mirrors the console's closing message */
+    .pipeline-footer {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: #1A4A1A;
+      padding: 8px 4px 4px;
+      flex-shrink: 0;
+    }
+    .pipeline-footer .dim { color: var(--muted); }
+
     /* Story card uses the serif font for a "newspaper narrative" feel */
     .card-body.story-text {
       font-family: 'Playfair Display', serif;
@@ -442,17 +463,6 @@
   <!-- LEFT PANEL: Document Input -->
   <div class="panel panel-left">
 
-    <div class="label">Local Model</div>
-
-    <div class="model-input-row">
-      <input
-        type="text"
-        id="ollamaModel"
-        value="llama3"
-        placeholder="ollama model name (e.g. llama3)"
-      />
-    </div>
-
     <div class="label">Document Input</div>
 
     <!--
@@ -464,7 +474,7 @@
       id="docInput"
       placeholder="Paste a legal document, email chain, deposition transcript, or any case text here.
 
-This demo calls a local Ollama model and runs:
+This demo calls the local Python pipeline (Flask → LangChain + LlamaIndex + Ollama):
 • LangChain entity extraction chain
 • LangChain smoking gun detection chain
 • LangChain story synthesis chain
@@ -602,24 +612,22 @@ launch. The actual failure rate is 18.3%, not the 2.8% reported to the board and
         <div class="dot-anim"></div>
       </div>
       <div class="loading-text">
-        Running LlamaIndex document index...<br>
-        Chaining entity extraction prompt...<br>
-        Detecting smoking gun evidence...<br>
-        Synthesizing legal narrative...
+        ► Step 1: LlamaIndex — indexing document...<br>
+        ► Step 2: LangChain — building analysis chains...<br>
+        ► Step 3: Running entity / smoking-gun / story chains...<br>
+        ► Step 4: LlamaIndex — running RAG targeted queries...
       </div>`;
     panel.appendChild(loading);
   }
 
 
-  // ── analyze() — THE MAIN FUNCTION ────────────────────────────────────────
-  // This is an async function because it calls fetch() which is asynchronous.
-  // "async" before "function" means this function returns a Promise automatically.
-  // Ollama runs locally — by default at http://127.0.0.1:11434
-  const OLLAMA_URL = 'http://127.0.0.1:11434/api/chat';
+  // Calls the Python Flask wrapper that runs the exact same run_pipeline()
+  // as `python run.py`. Output is the raw text each LangChain chain produced,
+  // rendered verbatim in monospace so the panels match the console output.
+  const BACKEND_URL = 'http://127.0.0.1:5050/api/analyze';
 
   async function analyze() {
-    const text  = document.getElementById('docInput').value.trim();
-    const model = document.getElementById('ollamaModel').value.trim() || 'llama3';
+    const text = document.getElementById('docInput').value.trim();
 
     if (!text) { alert('Please paste a document first.'); return; }
 
@@ -630,69 +638,19 @@ launch. The actual failure rate is 18.3%, not the 2.8% reported to the board and
     showLoading();
 
     try {
-      const systemPrompt = `/no_think
-You are a legal eDiscovery AI that runs four specialized analysis chains:
-
-CHAIN 1 (LlamaIndex RAG simulation): Extract key facts for targeted retrieval
-CHAIN 2 (Entity Extraction): Find all named entities
-CHAIN 3 (Smoking Gun Detection): Identify the 3 most damaging pieces of evidence
-CHAIN 4 (Story Synthesis): Write the legal narrative
-
-Return ONLY valid JSON with NO markdown code fences, NO explanation text, in this exact structure:
-{
-  "story": "2-3 sentence plaintiff-perspective legal narrative using specific names and facts",
-  "defense": "1 sentence defense counter-narrative",
-  "smoking_guns": [
-    {"category": "DATA_SUPPRESSION", "text": "specific finding with names/dates/figures"},
-    {"category": "CONSPIRACY", "text": "specific finding"},
-    {"category": "FINANCIAL_MISCONDUCT", "text": "specific finding"}
-  ],
-  "entities": {
-    "persons": ["Name1", "Name2"],
-    "organizations": ["Org1"],
-    "dates": ["Date1", "Date2"],
-    "money": ["$Amount"],
-    "legal_concepts": ["concept1", "concept2"]
-  },
-  "rag_answers": [
-    {"question": "Who suppressed the data?", "answer": "Answer from document"},
-    {"question": "What was the real failure rate?", "answer": "Answer from document"},
-    {"question": "Was there a whistleblower?", "answer": "Answer from document"}
-  ]
-}`;
-
-      const response = await fetch(OLLAMA_URL, {
+      const response = await fetch(BACKEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.1, num_predict: 4096 },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: `/no_think\nAnalyze this legal document through all four chains:\n\n${text.slice(0, 4000)}`
-            }
-          ]
-        })
+        body: JSON.stringify({ document: text })
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Ollama returned ${response.status}: ${errText}`);
+        throw new Error(`Backend returned ${response.status}: ${errText}`);
       }
 
       const data = await response.json();
-      const rawText = (data.message && data.message.content) || '';
-      const cleanJson = extractJson(rawText);
-      if (!cleanJson) {
-        throw new Error('Ollama returned an empty or non-JSON response. Try a shorter document or click Analyze again.');
-      }
-      const result = normalizeResult(JSON.parse(cleanJson));
-
-      renderResults(result);
+      renderResults(data);
 
     } catch (error) {
       renderError(error);
@@ -703,133 +661,62 @@ Return ONLY valid JSON with NO markdown code fences, NO explanation text, in thi
   }
 
 
-  function normalizeResult(result) {
-    const r = result || {};
-
-    r.story = r.story || 'No narrative returned.';
-    r.defense = r.defense || '';
-
-    r.smoking_guns = Array.isArray(r.smoking_guns) ? r.smoking_guns.map(item => {
-      if (typeof item === 'string') return { category: 'EVIDENCE', text: item };
-      return {
-        category: item?.category || 'EVIDENCE',
-        text: item?.text || item?.finding || JSON.stringify(item)
-      };
-    }) : [];
-
-    if (Array.isArray(r.entities)) {
-      r.entities = {
-        persons: r.entities,
-        organizations: [],
-        dates: [],
-        money: [],
-        legal_concepts: []
-      };
-    } else {
-      r.entities = r.entities || {};
-    }
-
-    r.rag_answers = Array.isArray(r.rag_answers) ? r.rag_answers.map(item => {
-      if (typeof item === 'string') return { question: 'Finding', answer: item };
-      return {
-        question: item?.question || 'Finding',
-        answer: item?.answer || item?.text || JSON.stringify(item)
-      };
-    }) : [];
-
-    return r;
+  // Escapes HTML special characters so raw model output (which can contain
+  // < > & characters) renders as literal text rather than as HTML.
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
 
-  function extractJson(text) {
-    const cleaned = (text || '').replace(/```json|```/g, '').trim();
-    if (!cleaned) return '';
-
-    try {
-      JSON.parse(cleaned);
-      return cleaned;
-    } catch (_) {
-      const start = cleaned.indexOf('{');
-      const end = cleaned.lastIndexOf('}');
-      return start >= 0 && end > start ? cleaned.slice(start, end + 1) : '';
-    }
-  }
-
-
-  // ── renderResults(result) ────────────────────────────────────────────────
-  // Takes the parsed JSON from Ollama and builds result cards in the DOM.
-  //
-  // DOM manipulation: we create HTML elements programmatically using JS,
-  // instead of writing static HTML. This lets us build the UI dynamically
-  // based on whatever data comes back from the API.
+  // Renders the same four panels the console prints, with each chain's raw
+  // text shown verbatim inside a <pre> block. This is what makes the browser
+  // output visually identical to `python run.py`.
   function renderResults(r) {
     const panel = document.getElementById('outputPanel');
 
-    // Remove loading state
     document.getElementById('loadingState')?.remove();
-    // The ?. is "optional chaining" — if loadingState doesn't exist, don't crash
-
-    // Hide placeholder
     document.getElementById('placeholder').style.display = 'none';
-
-    // Remove any old result cards
     document.querySelectorAll('.result-card, .error-box').forEach(el => el.remove());
 
+    // ── Card 1: Legal Narrative (full story chain output) ──────────────
+    panel.appendChild(createCard('story', '📖 Legal Narrative', `
+      <pre class="card-body raw">${escapeHtml(r.story)}</pre>
+    `));
 
-    // ── Card 1: Legal Story ──────────────────────────────────────────────
-    const storyCard = createCard('story', '📖 Legal Narrative', `
-      <div class="card-body story-text">${r.story}</div>
-      ${r.defense ? `<div class="card-body" style="border-top:1px solid var(--border);padding-top:10px;">
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Defense:</span>
-        <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.7;">${r.defense}</div>
-      </div>` : ''}
-    `);
-    panel.appendChild(storyCard);
+    // ── Card 2: Smoking Guns (raw chain output) ────────────────────────
+    panel.appendChild(createCard('guns', '🔴 Smoking Gun Evidence', `
+      <pre class="card-body raw">${escapeHtml(r.smoking_guns)}</pre>
+    `));
 
+    // ── Card 3: Entities (raw chain output) ────────────────────────────
+    panel.appendChild(createCard('entity', '🔍 Key Entities Extracted', `
+      <pre class="card-body raw">${escapeHtml(r.entities)}</pre>
+    `));
 
-    // ── Card 2: Smoking Guns ────────────────────────────────────────────
-    if (r.smoking_guns?.length) {
-      const sgItems = r.smoking_guns.map(sg => `
-        <div class="sg-item">
-          <div class="sg-label">${sg.category}</div>
-          <div class="sg-text">${sg.text}</div>
-        </div>`).join('');
-      panel.appendChild(createCard('guns', '🔴 Smoking Gun Evidence', `
-        <div class="card-body" style="padding-bottom:8px;">${sgItems}</div>
-      `));
-    }
-
-
-    // ── Card 3: Entities ────────────────────────────────────────────────
-    if (r.entities) {
-      const e = r.entities;
-      // Build colored tags for each entity type
-      const tags = [
-        ...(e.persons       || []).map(p => `<span class="tag person">👤 ${p}</span>`),
-        ...(e.organizations || []).map(o => `<span class="tag org">🏢 ${o}</span>`),
-        ...(e.dates         || []).map(d => `<span class="tag date">📅 ${d}</span>`),
-        ...(e.money         || []).map(m => `<span class="tag money">💰 ${m}</span>`),
-        ...(e.legal_concepts|| []).map(l => `<span class="tag legal">⚖ ${l}</span>`),
-      ].join('');
-
-      panel.appendChild(createCard('entity', '🔍 Key Entities Extracted', `
-        <div class="card-body"><div class="entity-grid">${tags}</div></div>
-      `));
-    }
-
-
-    // ── Card 4: RAG Answers ─────────────────────────────────────────────
-    if (r.rag_answers?.length) {
+    // ── Card 4: RAG Answers (Q + A pairs from LlamaIndex) ──────────────
+    if (Array.isArray(r.rag_answers) && r.rag_answers.length) {
       const qaItems = r.rag_answers.map(qa => `
         <div class="rag-item">
-          <div class="rag-q">Q: ${qa.question}</div>
-          <div class="rag-a">${qa.answer}</div>
+          <div class="rag-q">Q: ${escapeHtml(qa.question)}</div>
+          <div class="rag-a">${escapeHtml(qa.answer)}</div>
         </div>`).join('');
 
-      panel.appendChild(createCard('rag', '💬 LlamaIndex RAG Queries', `
+      panel.appendChild(createCard('rag', '💬 LlamaIndex RAG — Targeted Queries', `
         <div class="card-body">${qaItems}</div>
       `));
     }
+
+    // ── Footer line (mirrors the console's closing line) ───────────────
+    const footer = document.createElement('div');
+    footer.className = 'pipeline-footer';
+    footer.innerHTML =
+      '✓ Pipeline complete. ' +
+      '<span class="dim">LlamaIndex handled retrieval. ' +
+      'LangChain handled reasoning. Ollama powered the local LLM layer.</span>';
+    panel.appendChild(footer);
   }
 
 
@@ -859,13 +746,12 @@ Return ONLY valid JSON with NO markdown code fences, NO explanation text, in thi
     const box = document.createElement('div');
     box.className = 'error-box';
     box.innerHTML = `
-      <strong>Error:</strong> ${error.message}<br><br>
+      <strong>Error:</strong> ${escapeHtml(error.message)}<br><br>
       <span style="color:var(--muted);">
         Common causes:<br>
+        • Python backend isn't running — start it with <code>./venv/bin/python backend/server.py</code><br>
         • Ollama isn't running — start it with <code>ollama serve</code><br>
-        • Model isn't pulled — run <code>ollama pull llama3</code><br>
-        • CORS blocked the request — restart Ollama with <code>OLLAMA_ORIGINS='*' ollama serve</code><br>
-        • JSON parse error — the model returned non-JSON output<br>
+        • Models not pulled — run <code>ollama pull qwen3:4b && ollama pull nomic-embed-text</code><br>
       </span>`;
     panel.appendChild(box);
   }
